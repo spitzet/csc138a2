@@ -36,7 +36,7 @@ class SmtpClient ():
     _defaultConfig = {
         'host': 'localhost',
         'port': 25,
-        'ssl': False,
+        'ssl': False,   
         'timeout': socket._GLOBAL_DEFAULT_TIMEOUT,
     }
 
