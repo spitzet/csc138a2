@@ -8,7 +8,9 @@
 # Created by Greg M. Crist, Jr. <gmcrist@gmail.com> & Travis Spitze <travissp87@gmail.com>
 ##
 
+import base64       # For base 64 encoding of username/password for smtp authentication 
 import logging      # For logging / debug messages
+import re           # Regular Expressions
 import socket       # Network socket coding
 import ssl          # SSL code
 import time         # Date / time functions
@@ -16,10 +18,18 @@ import time         # Date / time functions
 
 # Default configuration for the server
 config = {
-    'host': 'smtp.fireup.net',
+    'host': 'smtp.gmail.com',
     'port': '25',
-    'ssl': True,
+    'ssl': False,
+    'username': 'username@gmail.com',
+    'password': 'password',
     'loglevel': logging.DEBUG
+}
+
+message = {
+    'sender': 'sender@example.com',
+    'recipients': ['recipient@example.com'],
+    'body': "From: sender@example.com\r\nSubject: Test for CPE 138\r\n\r\nThis is a test\r\n"
 }
 
 class SmtpClient ():
@@ -37,13 +47,12 @@ class SmtpClient ():
 
         (code, response) = self.connect()
         if (code != 220):
-            self._logger.info('Could not establish connection to SMTP server')
             raise Exception('Could not establish connection to SMTP server')
         
         # RFC 2821 requires us to use the fully qualified domain name for the EHLO/HELO commands
         fqdn = socket.getfqdn()
 
-        if '.' in fqdn:
+        if ('.' in fqdn):
             # We have a valid fqdn
             self.config['localhostname'] = fqdn
         else:
@@ -64,6 +73,15 @@ class SmtpClient ():
     def connect(self):
         self._logger.info('Creating connection to SMTP server ' + self.config['host'] + ' on port ' + str(self.config['port']))
         self.socket = socket.create_connection((self.config['host'], self.config['port']), self.config['timeout'])
+
+        if (self.config['ssl']):
+            self._logger.info('Establishing TLS connection')
+            (code, response) = self.command('STARTTLS')
+            
+            if (code != 220):
+                raise Exception('Error starting TLS: ' + code + ' ' + response)
+
+            self.socket = ssl.wrap_socket(self.socket, ssl_version = ssl.PROTOCOL_SSLv23)
         
         return self.response()
 
@@ -85,13 +103,12 @@ class SmtpClient ():
     # Send data to socket
     ##
     def send(self, data):
-        self._logger.debug('Sending data to SMTP server')
         if (self.socket):
             try:
                 self.socket.sendall(data)
             except socket.error:
                 self._logger.error('Error sending data to socket')
-                self.disconnect();
+                self.disconnect()
                 raise Exception('error sending data to socket')
         else:
             self._logger.error('no socket connection')
@@ -117,31 +134,20 @@ class SmtpClient ():
     def response(self):
         response = []
         
-        # It is easier to use the socket readline method
-        if (self.file is None):
-            self.file = self.socket.makefile('rb')
+        try:
+            data = self.socket.recv(1024)
+
+        except socket.error:
+            self._logger.error('Connection to SMTP server closed unexpectedly')
+            self.disconnect()
+            raise Exception('Connection to SMTP server closed unexpectedly')
         
-        while True:
-            try:
-                line = self.file.readline()
+        # The response code is always a 3-digit number
+        code = int(data[:3])
+        
+        # Append the response data (no need to store the message)
+        response.append(data[4:].strip())
 
-            except socket.error:
-                self._logger.error('Connection to SMTP server closed unexpectedly');
-                self.disconnect();
-                raise Exception('Connection to SMTP server closed unexpectedly');
-            
-            # The response code is always a 3-digit number
-            code = int(line[:3])
-            
-            # Append the response data (no need to store the message)
-            response.append(line[4:].strip())
-
-            # Multi-line responses have a "-" character in between the code and response
-            if (line[3:4] != '-'):
-                break
-            else:
-                self._logger.info(line)
-    
         return code, "\n".join(response)
 
 
@@ -155,10 +161,18 @@ class SmtpClient ():
     def data(self, message):
         (code, response) = self.command('DATA')
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-        if (response == '354'):
-            self._logger.debug('Start mail input; end with <CRLF>.<CRLF>')
-        else raise Exception('Error')
-        return code, response
+
+        if (code != 354):
+            raise Exception('Error with DATA command: ' + code + ' ' + response)
+
+        # Handle invalid line endings and lines starting with a data end sequence
+        message = re.sub(r'(?m)^\.', '..', re.sub(r'(?:\r\n|\n|\r(?!\n))', message, "\r\n"))
+
+        # Send the message and data end sequence
+        self.send(message)
+        self.send("\r\n.\r\n")
+
+        return self.response()
 
     ##
     # EHLO
@@ -166,21 +180,10 @@ class SmtpClient ():
     def ehlo(self):
         (code, response) = self.command('EHLO', self.config['localhostname'])
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-        if (response == '250'):
-            self._logger.debug('Successful')
-        else raise Exception('Error')
-        return code, response
 
-    ##
-    # EXPN: Expands mailing list 
-    ##
-    def expn(self, address):
-        (code, response) = self.command('EXPN', address)
-        self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-        if (response == '250'):
-            self._logger.debug('Successful')
-        else raise Exception('Error')
-        self.disconnect()
+        if (code != 250):
+            raise Exception('Error with EHLO command: ' + code + ' ' + response)
+
         return code, response
 
     ##
@@ -189,9 +192,10 @@ class SmtpClient ():
     def helo(self):
         (code, response) = self.command('HELO', self.config['localhostname'])
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-        if (response == '250'):
-            self._logger.debug('Successful')
-        else raise Exception('Error')
+
+        if (code != 250):
+            raise Exception('Error with HELO command: ' + code + ' ' + response)
+
         return code, response
 
     ##
@@ -202,22 +206,10 @@ class SmtpClient ():
 
         (code, response) = self.command('MAIL', 'FROM: ' + sender)
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-        if (response == '250'):
-            self._logger.debug('Successful')
-        else raise Exception('Error')
-        return code, response
 
-    ##
-    # NOOP: Does Nothing
-    ##
-    def noop(self):
-        (code, response) = self.command('NOOP')
-        self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-        if (response == '250'):
-            self._logger.debug('Successful')
-        elif (response == '200'):
-            self._logger.debug('Nonstandard Success Reponse')
-        else raise Exception('Error')
+        if (code != 250):
+            raise Exception('Error with MAIL command: ' + code + ' ' + response)
+
         return code, response
 
     ##
@@ -226,9 +218,10 @@ class SmtpClient ():
     def rcpt(self, recipient):
         (code, response) = self.command('RCPT', 'TO: ' + recipient)
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-        if (response == '250'):
-            self._logger.debug('Successful')
-        else raise Exception('Error')
+
+        if (code != 250):
+            raise Exception('Error with RCPT command: ' + code + ' ' + response)
+
         return code, response
 
     ##
@@ -237,50 +230,83 @@ class SmtpClient ():
     def quit(self):
         (code, response) = self.command('QUIT')
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-        self.disconnect()
-        return code, response
-    
-    ##
-    # RSET: Resets the current SMTP session
-    ##
-    def rset(self):
-        (code, response) = self.command('RSET')
-        self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-        if (response == '250'):
-            self._logger.debug('Successful')
-        elif (response == '200'):
-            self._logger.debug('Nonstandard Success Reponse')
-        else raise Exception('Error')
-        return code, response
-    
-    ##
-    # VRFY: Checks that an address is valid
-    ##
-    def vrfy(self, address):
-        (code, response) = self.command('VRFY', address)
-        self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-        if (response == '250'):
-            self._logger.debug('Successful')
-        else raise Exception('Error')
+
+        if (code != 221):
+            raise Exception('Error with QUIT command: ' + code + ' ' + response)
+
         self.disconnect()
         return code, response
 
-
     ##
-    # Skeleton for a all-in-one sendmail function
+    # SMTP Authentication
     ##
-    def sendmail(self, fromAddr, toAddrs, subject, message):
-        self.setFromAddr(fromAddr)
-        self.addRecipients(toAddrs)
-        self.setSubject(subject)
-        self.setMessage(message)
-        self.send()
+    def login(self, username = None, password = None, method = 'PLAIN'):
+        username = username or self.config['username']
+        password = password or self.config['password']
         
+        # Only implementing AUTH_LOGIN
+        (code, response) = self.command('AUTH', 'LOGIN ' + base64.b64encode(username))
+        self._logger.debug('Received ' + str(code) + ' with response: ' + response)
+
+        if (code != 334):
+            raise Exception('AUTH LOGIN command not successful')
+        
+        (code, response) = self.command(base64.b64encode(password))
+        self._logger.debug('Received ' + str(code) + ' with response: ' + response)
+        
+        # 235 - Authentication Successful, 503 - Already authenticated
+        if (code not in (235, 503)):
+            self._logger.debug('AUTH LOGIN failed')
+            raise Exception('AUTH LOGIN failed')
+
+        return code, response
+
+    ##
+    # sendmail function
+    ##
+    def sendmail(self, sender, recipients, message):
+        (code, response) = self.ehlo()
+        if (code != 250):
+            raise Exception()
+        
+        (code, response) = self.mail(sender)
+        if (code != 250):
+            raise Exception()
+
+        # Handle single recipient
+        if (isinstance(recipients, basestring)):
+            recipients = [recipients]
+
+        recipient_errors = []
+
+        for recipient in recipients:
+            (code, response) = self.rcpt(recipient)
+            self._logger.debug('Received ' + str(code) + ' with response: ' + response)
+
+            if (code not in (250, 251)):
+                recipient_errors[recipient] = (code, response)
+
+        if (len(recipient_errors) < len(recipients)):
+            (code, response) = self.data(message)
+            self._logger.debug('Received ' + str(code) + ' with response: ' + response)
+            
+            if (code != 250):
+                raise Exception('Error sending message') 
+
+        return recipient_errors
+
+
         
 logging.basicConfig(format='%(levelname)s: %(message)s', level=config['loglevel'])
-client = SmtpClient(config);
+client = SmtpClient(config)
 
-client.helo()
-client.quit()
+try:
+    client.login()
+    errors = client.sendmail(message['sender'], message['recipients'], message['body'])
 
+    for recipient in errors:
+        print 'Error sending to recipient "' + recipient + '", received error:'
+
+except Exception as e:
+    print e
 
