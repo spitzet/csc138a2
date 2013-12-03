@@ -13,23 +13,22 @@ import logging      # For logging / debug messages
 import re           # Regular Expressions
 import socket       # Network socket coding
 import ssl          # SSL code
-import time         # Date / time functions
 
 
 # Default configuration for the server
 config = {
     'host': 'smtp.gmail.com',
-    'port': '25',
-    'ssl': False,
-    'username': 'username@gmail.com',
+    'port': 465,
+    'ssl': True,
+    'username': 'sender@gmail.com',
     'password': 'password',
     'loglevel': logging.DEBUG
 }
 
 message = {
-    'sender': 'sender@example.com',
-    'recipients': ['recipient@example.com'],
-    'body': "From: sender@example.com\r\nSubject: Test for CPE 138\r\n\r\nThis is a test\r\n"
+    'sender': 'sender@gmail.com',
+    'recipients': ['recipient@gmail.com'],
+    'body': "From: sender@gmail.com\r\nSubject: Test for CPE 138\r\n\r\nThis is a test message for the CPE 138 programming assignment 2\r\n"
 }
 
 class SmtpClient ():
@@ -66,6 +65,9 @@ class SmtpClient ():
 
             self.config['localhostname'] = '[' + addr + ']'
 
+        (code, response) = self.ehlo()
+        
+
 
     ##
     # Connect socket
@@ -75,13 +77,8 @@ class SmtpClient ():
         self.socket = socket.create_connection((self.config['host'], self.config['port']), self.config['timeout'])
 
         if (self.config['ssl']):
-            self._logger.info('Establishing TLS connection')
-            (code, response) = self.command('STARTTLS')
-            
-            if (code != 220):
-                raise Exception('Error starting TLS: ' + code + ' ' + response)
-
-            self.socket = ssl.wrap_socket(self.socket, ssl_version = ssl.PROTOCOL_SSLv23)
+            self._logger.info('Establishing implicit SSL connection')
+            self.socket = ssl.wrap_socket(self.socket, ssl_version=ssl.PROTOCOL_SSLv23)
         
         return self.response()
 
@@ -105,7 +102,7 @@ class SmtpClient ():
     def send(self, data):
         if (self.socket):
             try:
-                self.socket.sendall(data)
+                self.socket.sendall(data.encode())
             except socket.error:
                 self._logger.error('Error sending data to socket')
                 self.disconnect()
@@ -204,7 +201,7 @@ class SmtpClient ():
     def mail(self, sender = None):
         sender = sender or self.sender
 
-        (code, response) = self.command('MAIL', 'FROM: ' + sender)
+        (code, response) = self.command('MAIL', 'FROM: <' + sender + '>')
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
 
         if (code != 250):
@@ -216,7 +213,7 @@ class SmtpClient ():
     # RCPT: Message Recipient
     ##
     def rcpt(self, recipient):
-        (code, response) = self.command('RCPT', 'TO: ' + recipient)
+        (code, response) = self.command('RCPT', 'TO: <' + recipient + '>')
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
 
         if (code != 250):
@@ -265,10 +262,6 @@ class SmtpClient ():
     # sendmail function
     ##
     def sendmail(self, sender, recipients, message):
-        (code, response) = self.ehlo()
-        if (code != 250):
-            raise Exception()
-        
         (code, response) = self.mail(sender)
         if (code != 250):
             raise Exception()
