@@ -58,6 +58,8 @@ class SmtpClient ():
     def connect(self):
         self._logger.info('Creating connection to SMTP server ' + self.config['host'] + ' on port ' + str(self.config['port']))
         self.socket = socket.create_connection((self.config['host'], self.config['port']), self.config['timeout'])
+        
+        return self.response()
 
     ##
     # Disconnect socket
@@ -94,6 +96,7 @@ class SmtpClient ():
     ##
     def command(self, command, data):
         self._logger.info('Sending command "' + command + '" to SMTP server')
+        
         if (data == ''):
             data = command + "\r\n"
         else:
@@ -131,17 +134,17 @@ class SmtpClient ():
             response.append(line[4:].strip())
 
             # Multi-line responses have a "-" character in between the code and response
-            if (line[3:4] == '-'):
+            if (line[3:4] != '-'):
                 break
     
-        return code, response            
+        return code, "\n".join(response)
 
     def helo(self):
-        [code, response] = self.command('HELO', self.config['localhostname']);
-        self._logger.info('Received ' + code + ' response with response: ' + response)
+        (code, response) = self.command('HELO', self.config['localhostname']);
+        self._logger.info('Received ' + str(code) + ' response with response: ' + response)
 
     def ehlo(self):
-        [code, response] = self.command('EHLO', self.config['localhostname']);
+        (code, response) = self.command('EHLO', self.config['localhostname']);
         
     
 
