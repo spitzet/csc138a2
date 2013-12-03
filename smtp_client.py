@@ -34,6 +34,11 @@ class SmtpClient ():
         self.config = dict(self._defaultConfig.items() + config.items())
         self._logger = logging.getLogger('SmtpClient')
         self.file = None
+
+        (code, response) = self.connect()
+        if (code != 220):
+            self._logger.info('Could not establish connection to SMTP server')
+            raise Exception('Could not establish connection to SMTP server')
         
         # RFC 2821 requires us to use the fully qualified domain name for the EHLO/HELO commands
         fqdn = socket.getfqdn()
@@ -51,6 +56,7 @@ class SmtpClient ():
                 pass
 
             self.config['localhostname'] = '[' + addr + ']'
+
 
     ##
     # Connect socket
@@ -94,12 +100,12 @@ class SmtpClient ():
     ##
     # Execute SMTP command and get response
     ##
-    def command(self, command, data):
-        self._logger.info('Sending command "' + command + '" to SMTP server')
-        
-        if (data == ''):
+    def command(self, command, data = None):
+        if (data is None):
+            self._logger.debug('Sending command "' + command + '" to SMTP server')
             data = command + "\r\n"
         else:
+            self._logger.debug('Sending command "' + command + '" with data "' + data + '" to SMTP server')
             data = command + ' ' + data + "\r\n"
         
         self.send(data)
@@ -118,14 +124,11 @@ class SmtpClient ():
         while True:
             try:
                 line = self.file.readline()
-                
+
             except socket.error:
                 self._logger.error('Connection to SMTP server closed unexpectedly');
                 self.disconnect();
                 raise Exception('Connection to SMTP server closed unexpectedly');
-            
-            self._logger.debug(line);
-            
             
             # The response code is always a 3-digit number
             code = int(line[:3])
@@ -136,19 +139,105 @@ class SmtpClient ():
             # Multi-line responses have a "-" character in between the code and response
             if (line[3:4] != '-'):
                 break
+            else:
+                self._logger.info(line)
     
         return code, "\n".join(response)
 
-    def helo(self):
-        (code, response) = self.command('HELO', self.config['localhostname']);
-        self._logger.info('Received ' + str(code) + ' response with response: ' + response)
 
+    #################
+    # SMTP Commands #
+    #################
+
+    ##
+    # DATA: Sends Message Data
+    ##
+    def data(self, message):
+        (code, response) = self.command('DATA')
+        self._logger.debug('Received ' + str(code) + ' with response: ' + response)
+        return code, response
+
+    ##
+    # EHLO
+    ##
     def ehlo(self):
-        (code, response) = self.command('EHLO', self.config['localhostname']);
-        
+        (code, response) = self.command('EHLO', self.config['localhostname'])
+        self._logger.debug('Received ' + str(code) + ' with response: ' + response)
+        return code, response
+
+    ##
+    # EXPN: Expands mailing list 
+    ##
+    def expn(self, address):
+        (code, response) = self.command('EXPN', address)
+        self._logger.debug('Received ' + str(code) + ' with response: ' + response)
+        self.disconnect()
+        return code, response
+
+    ##
+    # HELO
+    ##
+    def helo(self):
+        (code, response) = self.command('HELO', self.config['localhostname'])
+        self._logger.debug('Received ' + str(code) + ' with response: ' + response)
+        return code, response
+
+    ##
+    # MAIL: Message from 
+    ##
+    def mail(self, sender = None):
+        sender = sender or self.sender
+
+        (code, response) = self.command('MAIL', 'FROM: ' + sender)
+        self._logger.debug('Received ' + str(code) + ' with response: ' + response)
+        return code, response
+
+    ##
+    # NOOP: Does Nothing
+    ##
+    def noop(self):
+        (code, response) = self.command('NOOP')
+        self._logger.debug('Received ' + str(code) + ' with response: ' + response)
+        return code, response
+
+    ##
+    # RCPT: Message Recipient
+    ##
+    def rcpt(self, recipient):
+        (code, response) = self.command('RCPT', 'TO: ' + recipient)
+        self._logger.debug('Received ' + str(code) + ' with response: ' + response)
+        return code, response
+
+    ##
+    # QUIT: Quits the SMTP session
+    ##
+    def quit(self):
+        (code, response) = self.command('QUIT')
+        self._logger.debug('Received ' + str(code) + ' with response: ' + response)
+        self.disconnect()
+        return code, response
     
+    ##
+    # RSET: Resets the current SMTP session
+    ##
+    def rset(self):
+        (code, response) = self.command('RSET')
+        self._logger.debug('Received ' + str(code) + ' with response: ' + response)
+        return code, response
+    
+    ##
+    # VRFY: Checks that an address is valid
+    ##
+    def vrfy(self, address):
+        (code, response) = self.command('VRFY', address)
+        self._logger.debug('Received ' + str(code) + ' with response: ' + response)
+        self.disconnect()
+        return code, response
 
 
+    ##
+    # Skeleton for a all-in-one sendmail function
+    ##
     def sendmail(self, fromAddr, toAddrs, subject, message):
         self.setFromAddr(fromAddr)
         self.addRecipients(toAddrs)
@@ -157,9 +246,10 @@ class SmtpClient ():
         self.send()
         
         
-logging.basicConfig(format='%(levelname)s:%(message)s', level=config['loglevel'])
+logging.basicConfig(format='%(levelname)s: %(message)s', level=config['loglevel'])
 client = SmtpClient(config);
 
-client.connect();
-client.helo();
+client.helo()
+client.quit()
+
 
