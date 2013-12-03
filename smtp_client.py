@@ -168,6 +168,7 @@ class SmtpClient ():
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
 		if (response == '250'):
 			self._logger.debug('Successful')
+			message = message + "\r\n.\r\n"
 		else raise Exception('Error')
         return code, response
 
