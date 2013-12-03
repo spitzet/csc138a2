@@ -155,9 +155,9 @@ class SmtpClient ():
     def data(self, message):
         (code, response) = self.command('DATA')
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-		if (response == '354'):
-			self._logger.debug('Start mail input; end with <CRLF>.<CRLF>')
-		else raise Exception('Error')
+        if (response == '354'):
+            self._logger.debug('Start mail input; end with <CRLF>.<CRLF>')
+        else raise Exception('Error')
         return code, response
 
     ##
@@ -166,9 +166,9 @@ class SmtpClient ():
     def ehlo(self):
         (code, response) = self.command('EHLO', self.config['localhostname'])
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-		if (response == '250'):
-			self._logger.debug('Successful')
-		else raise Exception('Error')
+        if (response == '250'):
+            self._logger.debug('Successful')
+        else raise Exception('Error')
         return code, response
 
     ##
@@ -177,9 +177,9 @@ class SmtpClient ():
     def expn(self, address):
         (code, response) = self.command('EXPN', address)
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-		if (response == '250'):
-			self._logger.debug('Successful')
-		else raise Exception('Error')
+        if (response == '250'):
+            self._logger.debug('Successful')
+        else raise Exception('Error')
         self.disconnect()
         return code, response
 
@@ -189,9 +189,9 @@ class SmtpClient ():
     def helo(self):
         (code, response) = self.command('HELO', self.config['localhostname'])
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-		if (response == '250'):
-			self._logger.debug('Successful')
-		else raise Exception('Error')
+        if (response == '250'):
+            self._logger.debug('Successful')
+        else raise Exception('Error')
         return code, response
 
     ##
@@ -202,9 +202,9 @@ class SmtpClient ():
 
         (code, response) = self.command('MAIL', 'FROM: ' + sender)
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-		if (response == '250'):
-			self._logger.debug('Successful')
-		else raise Exception('Error')
+        if (response == '250'):
+            self._logger.debug('Successful')
+        else raise Exception('Error')
         return code, response
 
     ##
@@ -213,11 +213,11 @@ class SmtpClient ():
     def noop(self):
         (code, response) = self.command('NOOP')
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-		if (response == '250'):
-			self._logger.debug('Successful')
-		elif (response == '200'):
-			self._logger.debug('Nonstandard Success Reponse')
-		else raise Exception('Error')
+        if (response == '250'):
+            self._logger.debug('Successful')
+        elif (response == '200'):
+            self._logger.debug('Nonstandard Success Reponse')
+        else raise Exception('Error')
         return code, response
 
     ##
@@ -226,9 +226,9 @@ class SmtpClient ():
     def rcpt(self, recipient):
         (code, response) = self.command('RCPT', 'TO: ' + recipient)
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-		if (response == '250'):
-			self._logger.debug('Successful')
-		else raise Exception('Error')
+        if (response == '250'):
+            self._logger.debug('Successful')
+        else raise Exception('Error')
         return code, response
 
     ##
@@ -246,11 +246,11 @@ class SmtpClient ():
     def rset(self):
         (code, response) = self.command('RSET')
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-		if (response == '250'):
-			self._logger.debug('Successful')
-		elif (response == '200'):
-			self._logger.debug('Nonstandard Success Reponse')
-		else raise Exception('Error')
+        if (response == '250'):
+            self._logger.debug('Successful')
+        elif (response == '200'):
+            self._logger.debug('Nonstandard Success Reponse')
+        else raise Exception('Error')
         return code, response
     
     ##
@@ -259,9 +259,9 @@ class SmtpClient ():
     def vrfy(self, address):
         (code, response) = self.command('VRFY', address)
         self._logger.debug('Received ' + str(code) + ' with response: ' + response)
-		if (response == '250'):
-			self._logger.debug('Successful')
-		else raise Exception('Error')
+        if (response == '250'):
+            self._logger.debug('Successful')
+        else raise Exception('Error')
         self.disconnect()
         return code, response
 
